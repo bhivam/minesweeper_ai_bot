@@ -128,7 +128,7 @@ def collect_data(width, height, iters, path, p=None, num_bombs=None):
 
 
 def main():
-    collect_data(9, 9, 10, "test_data_gen.json", num_bombs=10)
+    collect_data(9, 9, 3000, "test_data_gen.json", num_bombs=10)
 
 
 if __name__ == "__main__":
