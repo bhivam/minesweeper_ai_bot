@@ -73,6 +73,13 @@ class MineBoard:
     def has_mine(self, row, col):
         return self.board[row][col]["has_mine"]
 
+    def get_num_mines(self):
+        mines = 0
+        for row in range(self.height):
+            for col in range(self.width):
+                mines += 1 if self.has_mine(row, col) else 0
+        return mines
+
     def compute_clues(self):
         for row in range(self.height):
             for col in range(self.width):

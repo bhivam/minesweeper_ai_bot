@@ -1,5 +1,6 @@
+import pickle
+import sys
 from mine_board import MineBoard
-import json
 from tqdm import tqdm
 
 
@@ -18,19 +19,38 @@ class SimpleLogicBot:
             for col in range(board.width):
                 self.remaining.add((row, col))
 
-    def export_game_state(self):
+    def get_cell_state(self, cell):
+        row, col = cell
+        if cell in self.revealed:
+            return int(self.clues[cell])
+        elif row < 0 or row >= self.board.width or col < 0 or col >= self.board.height:
+            return 10  # off board
 
-        def get_cell_state(cell):
-            state = [0] * 11
-            if cell in self.revealed:
-                state[self.clues[cell]] = 1
-            elif self.board.has_mine(*cell):
-                state[10] = 1
-            else:
-                state[9] = 1
-            return state
+        elif self.board.has_mine(*cell):
+            return 11  # has mine
+        else:
+            return 9  # unrevealed
+ 
+    def get_example(self, cell, radius=2):
+        return [
+                [
+                    self.get_cell_state((i, j))
+                    for i in range(cell[0] - radius, cell[0] + radius + 1)
+                    ]
+                for j in range(cell[1] - radius, cell[1] + radius + 1)
+                ]
+    
+    def get_examples(self, radius=2):
+        examples = set()
 
-        return [[get_cell_state((row, col)) for col in range(self.board.width)] for row in range(self.board.height)]
+        # get all edge tiles 
+        for cell in self.revealed:
+            for ncell in self.board.get_neighbors(*cell):
+                if ncell not in self.revealed: 
+                    examples.add(self.get_example(ncell, radius=radius))
+
+        return examples
+
 
     def make_inference(self):
         made_inference = False
@@ -56,13 +76,13 @@ class SimpleLogicBot:
 
         return made_inference
 
-    def play_board(self, get_board=False):
+    def play_board(self, get_data=False):
         triggered_mines = 0
-        game_states = []
+        game_states = set()
 
         while True:
-            if get_board:
-                game_states.append(self.export_game_state())
+            if get_data:
+                game_states.update(self.get_examples())
 
             row, col = None, None
             if len(self.safe) > 0:
@@ -88,23 +108,23 @@ class SimpleLogicBot:
                 if not self.make_inference():
                     break
 
-        return len(self.revealed), triggered_mines, game_states
+        return len(self.revealed), triggered_mines, list(game_states)
 
 
-def test_bot(width, height, iters):
+def test_bot(width, height, iters, min_bombs, max_bombs):
     print(f"Board Settings: {width}x{height} {iters} iters")
-    for i in range(1, 41):
+    for i in range(min_bombs, max_bombs+1):
         wins = 0
         avg_triggered_mines = 0
         for _ in range(iters):
             mb = MineBoard(width, height, num_bombs=i)
             bot = SimpleLogicBot(mb)
 
-            num_opened, triggered_mines = bot.play_board()
+            _, triggered_mines, _ = bot.play_board()
 
             avg_triggered_mines += triggered_mines
 
-            if num_opened == width * height - i and triggered_mines == 0:
+            if triggered_mines == 0:
                 wins += 1
 
         print(f"{i} bombs | {100*wins/iters:.2f}% WR | {avg_triggered_mines /
@@ -122,13 +142,37 @@ def collect_data(width, height, iters, path, p=None, num_bombs=None):
 
         game_states.extend(game_states_i)
 
-    json.dump(game_states, open(path, "w"), indent=4)
-
-# TODO test this bot once more with the clue update on triggerd mine change
+    pickle.dump(game_states, open(path, "wb"))
 
 
 def main():
-    collect_data(9, 9, 3000, "test_data_gen.json", num_bombs=10)
+    argv = sys.argv
+    argc = len(argv)
+
+    if argv[1] == "benchmark":
+        if argc != 7:
+            print(
+                "Usage: python3 nn_bot.py visual <board height> <board width> <min # of bombs> <max # of bombs> <iters>"
+            )
+            sys.exit(1)
+        _, _, height, width, min_bombs, max_bombs, iters = argv
+
+        print(
+            f"Model: Logic Bot | HxW: {height}x{width} | Bomb Range: {min_bombs}-{max_bombs} | {iters} Iterations"
+        )
+        test_bot(height, width, iters, min_bombs, max_bombs)
+    elif argv[1] == "old_datagen":
+        if argc != 7:
+            print(
+                "Usage: python3 nn_bot.py old_datagen <model path> <board height> <board width> <# of bombs> <iters> <data path>"
+            )
+            sys.exit(1)
+
+        _, _, height, width, num_bombs, iters, data_path = argv
+        height, width, num_bombs, iters = int(height), int(width), int(num_bombs), int(iters)
+
+        collect_data(height, width, iters, data_path, num_bombs=num_bombs)
+
 
 
 if __name__ == "__main__":
