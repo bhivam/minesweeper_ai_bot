@@ -4,7 +4,7 @@ from random import random, shuffle
 
 class MineBoard:
 
-    def __init__(self, width: int, height: int, p=None, num_bombs=None):
+    def __init__(self, height, width, p=None, num_bombs=None):
         assert height > 0 and width > 0
         assert p is None or num_bombs is None
         if p is None:
@@ -15,7 +15,11 @@ class MineBoard:
         self.width = width
         self.height = height
 
-        self.board = [[dict() for i in range(width)] for j in range(height)]
+        self.board = [[dict() for i in range(width)] for i in range(height)]
+
+        self.start_cell = (int(random() * height), int(random() * width))
+        safe_cells = set(self.get_neighbors(*self.start_cell))
+        safe_cells.add(self.start_cell)
 
         for row in self.board:
             for cell in row:
@@ -23,16 +27,25 @@ class MineBoard:
 
         if p is not None:  # use probability
             assert isinstance(p, float) and p > 0 and p < 1
+            p *= height * width / (height * width - len(safe_cells))
 
             for row in self.board:
                 for cell in row:
-                    if random() < p:
+                    if random() < p and cell not in safe_cells:
                         cell["has_mine"] = True
 
         if num_bombs is not None:
-            assert isinstance(num_bombs, int) and num_bombs > 0
+            assert isinstance(num_bombs, int) and num_bombs >= 0
+
+            if num_bombs == 0:
+                self.compute_clues()
+                return
 
             board_indexes = list(range(width * height))
+
+            for row, col in safe_cells:
+                board_indexes.remove(row * width + col)
+
             shuffle(board_indexes)
             bomb_locations = board_indexes[:num_bombs]
 
@@ -61,9 +74,9 @@ class MineBoard:
                 if (
                     (row == i and col == j)
                     or row < 0
-                    or row >= self.width
+                    or row >= self.height
                     or col < 0
-                    or col >= self.height
+                    or col >= self.width
                 ):
                     continue
                 neighbors.append((row, col))
@@ -71,7 +84,11 @@ class MineBoard:
         return neighbors
 
     def has_mine(self, row, col):
-        return self.board[row][col]["has_mine"]
+        try:
+            return self.board[row][col]["has_mine"]
+        except Exception as e:
+            print(row, col)
+            raise e
 
     def get_num_mines(self):
         mines = 0
